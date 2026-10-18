@@ -38,6 +38,9 @@ export type OverworldData = {
 export type DrawOptions = {
   genre: string;
   pulse: number;
+  // Keep place markers and their captions legible in CSS pixels while zooming.
+  zoom?: number;
+  viewport?: { left: number; top: number; width: number; height: number };
   selectedLocationId?: string | null;
   // The backdrop, once the panel has loaded it. Drawn in place of the tiles.
   backdrop?: HTMLImageElement | null;
@@ -134,6 +137,7 @@ export function drawOverworld(
 ) {
   const skin = skinForGenre(options.genre);
   const tile = OVERWORLD_TILE;
+  const markerScale = 1 / (options.zoom || 1);
   const { width, height, terrain } = data.map;
 
   if (usable(options.backdrop)) {
@@ -212,12 +216,12 @@ export function drawOverworld(
     const pinY = pin.y * tile + tile / 2;
     context.fillStyle = "rgba(190, 120, 240, 0.9)";
     context.beginPath();
-    context.arc(pinX, pinY, 4, 0, Math.PI * 2);
+    context.arc(pinX, pinY, 4 * markerScale, 0, Math.PI * 2);
     context.fill();
     if (pin.label) {
-      context.font = "10px sans-serif";
+      context.font = `${11 * markerScale}px sans-serif`;
       context.fillStyle = "rgba(220, 190, 250, 0.95)";
-      context.fillText(pin.label, pinX + 7, pinY + 3);
+      context.fillText(pin.label, pinX + 7 * markerScale, pinY + 3 * markerScale);
     }
   }
 
@@ -234,32 +238,73 @@ export function drawOverworld(
     if (location.isCurrent) {
       const pulse = 6 + Math.sin(options.pulse / 12) * 2.5;
       context.strokeStyle = "rgba(250, 200, 90, 0.85)";
-      context.lineWidth = 2;
+      context.lineWidth = 2 * markerScale;
       context.beginPath();
-      context.arc(markerX, markerY, pulse, 0, Math.PI * 2);
+      context.arc(markerX, markerY, pulse * markerScale, 0, Math.PI * 2);
       context.stroke();
     }
     if (options.selectedLocationId === location.id) {
       context.strokeStyle = "rgba(120, 220, 250, 0.95)";
-      context.lineWidth = 2;
+      context.lineWidth = 2 * markerScale;
       context.beginPath();
-      context.arc(markerX, markerY, 9, 0, Math.PI * 2);
+      context.arc(markerX, markerY, 9 * markerScale, 0, Math.PI * 2);
       context.stroke();
     }
     context.fillStyle = location.visited
       ? "rgba(250, 225, 160, 0.95)"
-      : "rgba(250, 225, 160, 0.4)";
+      : "#ac741c";
     context.beginPath();
-    context.arc(markerX, markerY, 4.5, 0, Math.PI * 2);
+    context.arc(markerX, markerY, 5 * markerScale, 0, Math.PI * 2);
     context.fill();
     context.strokeStyle = "rgba(30, 25, 15, 0.8)";
-    context.lineWidth = 1;
+    context.lineWidth = markerScale;
     context.stroke();
-    context.font = "600 10px sans-serif";
-    context.fillStyle = location.visited
-      ? "rgba(250, 240, 220, 0.95)"
-      : "rgba(250, 240, 220, 0.5)";
-    context.fillText(location.name, markerX + 8, markerY - 6);
+  }
+
+  // Captions stay screen-sized, but nearby places must not write over one
+  // another at island scale. Reserve every dot, then place names around
+  // them, keeping the current place first. Zooming reveals more room.
+  const bounds = options.viewport ?? { left: 0, top: 0, width: width * tile, height: height * tile };
+  type Box = { left: number; top: number; right: number; bottom: number };
+  const occupied: Box[] = data.locations.filter((location) => location.anchor).map((location) => {
+    const x = (location.anchor!.x + .5) * tile, y = (location.anchor!.y + .5) * tile;
+    return { left: x - 7 * markerScale, right: x + 7 * markerScale, top: y - 7 * markerScale, bottom: y + 7 * markerScale };
+  });
+  const overlaps = (a: Box, b: Box) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+  context.font = `600 ${11 * markerScale}px sans-serif`;
+  const named = [...data.locations].sort((a, b) => Number(b.isCurrent) - Number(a.isCurrent));
+  for (const location of named) {
+    if (!location.anchor) continue;
+    const x = (location.anchor.x + .5) * tile, y = (location.anchor.y + .5) * tile;
+    const textWidth = context.measureText(location.name).width;
+    let placed = false;
+    for (const row of [-1, 1, -2, 2, -3, 3, -4, 4]) {
+      for (const side of [1, -1]) {
+        const textX = side === 1 ? x + 9 * markerScale : x - textWidth - 9 * markerScale;
+        const textY = y + (row * 14 + 4) * markerScale;
+        const box = { left: textX - 2 * markerScale, right: textX + textWidth + 2 * markerScale,
+          top: textY - 11 * markerScale, bottom: textY + 3 * markerScale };
+        if (box.left < bounds.left || box.right > bounds.left + bounds.width ||
+            box.top < bounds.top || box.bottom > bounds.top + bounds.height || occupied.some((other) => overlaps(box, other))) continue;
+        occupied.push(box);
+        if (Math.abs(row) > 1) {
+          context.beginPath();
+          context.moveTo(x + side * 6 * markerScale, y);
+          context.lineTo(side === 1 ? textX : textX + textWidth, textY - 4 * markerScale);
+          context.strokeStyle = "rgba(40, 30, 15, 0.7)";
+          context.lineWidth = markerScale;
+          context.stroke();
+        }
+        context.lineWidth = 3 * markerScale;
+        context.strokeStyle = "rgba(20, 16, 10, 0.9)";
+        context.fillStyle = "rgba(250, 240, 220, 0.95)";
+        context.strokeText(location.name, textX, textY);
+        context.fillText(location.name, textX, textY);
+        placed = true;
+        break;
+      }
+      if (placed) break;
+    }
   }
 
   drawLabels(context, data.map.labels ?? [], tile);

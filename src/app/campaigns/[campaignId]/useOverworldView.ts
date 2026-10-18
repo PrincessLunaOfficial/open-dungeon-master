@@ -9,10 +9,22 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent, type RefOb
 
 export type MapView = { x: number; y: number; zoom: number };
 
-const ZOOM = { min: 0.4, max: 4 };
+export function fitOverworldView(width: number, height: number, mapWidth: number, mapHeight: number): MapView {
+  const zoom = Math.min(width / mapWidth, height / mapHeight);
+  return { zoom, x: (width - mapWidth * zoom) / 2, y: (height - mapHeight * zoom) / 2 };
+}
+
+export function zoomOverworldView(current: MapView, factor: number, x: number, y: number, fitZoom: number): MapView {
+  // A large imported atlas can fit at far less than the old 0.4 floor.
+  const zoom = Math.min(Math.max(4, fitZoom), Math.max(fitZoom / 2, current.zoom * factor));
+  const scale = zoom / current.zoom;
+  return { zoom, x: x - (x - current.x) * scale, y: y - (y - current.y) * scale };
+}
 
 export function useOverworldView(canvasRef: RefObject<HTMLCanvasElement | null>, ready: boolean) {
   const [view, setView] = useState<MapView>({ x: 0, y: 0, zoom: 1 });
+  const fitZoomRef = useRef(0.4);
+  const fittedSizeRef = useRef("");
   const dragRef = useRef<{ x: number; y: number; startX: number; startY: number } | null>(null);
   // Active pointers by id, for two-finger pinch zoom on touch screens.
   const pointersRef = useRef(new Map<number, { x: number; y: number }>());
@@ -31,18 +43,7 @@ export function useOverworldView(canvasRef: RefObject<HTMLCanvasElement | null>,
       const rect = canvas.getBoundingClientRect();
       const pointX = event.clientX - rect.left;
       const pointY = event.clientY - rect.top;
-      setView((current) => {
-        const zoom = Math.min(
-          ZOOM.max,
-          Math.max(ZOOM.min, current.zoom * (event.deltaY < 0 ? 1.15 : 0.87)),
-        );
-        const scale = zoom / current.zoom;
-        return {
-          zoom,
-          x: pointX - (pointX - current.x) * scale,
-          y: pointY - (pointY - current.y) * scale,
-        };
-      });
+      setView((current) => zoomOverworldView(current, event.deltaY < 0 ? 1.15 : 0.87, pointX, pointY, fitZoomRef.current));
     };
     canvas.addEventListener("wheel", handleWheel, { passive: false });
     return () => canvas.removeEventListener("wheel", handleWheel);
@@ -54,17 +55,13 @@ export function useOverworldView(canvasRef: RefObject<HTMLCanvasElement | null>,
   // new one.
   const fit = useCallback(
     (canvas: HTMLCanvasElement, mapWidth: number, mapHeight: number, force = false) => {
-      setView((current) => {
-        if (!force && (current.x || current.y)) {
-          return current;
-        }
-        const zoom = Math.min(canvas.width / mapWidth, canvas.height / mapHeight);
-        return {
-          zoom,
-          x: (canvas.width - mapWidth * zoom) / 2,
-          y: (canvas.height - mapHeight * zoom) / 2,
-        };
-      });
+      if (!canvas.width || !canvas.height || !mapWidth || !mapHeight) return;
+      const size = `${canvas.width}x${canvas.height}:${mapWidth}x${mapHeight}`;
+      const fitted = fitOverworldView(canvas.width, canvas.height, mapWidth, mapHeight);
+      fitZoomRef.current = fitted.zoom;
+      if (!force && fittedSizeRef.current === size) return;
+      fittedSizeRef.current = size;
+      setView(fitted);
     },
     [],
   );
@@ -104,14 +101,8 @@ export function useOverworldView(canvasRef: RefObject<HTMLCanvasElement | null>,
       const midY = mid.y - rect.top;
       const ratio = dist / pinch.dist;
       setView((current) => {
-        const zoom = Math.min(ZOOM.max, Math.max(ZOOM.min, current.zoom * ratio));
-        const scale = zoom / current.zoom;
-        // Zoom around the midpoint, then follow its movement.
-        return {
-          zoom,
-          x: midX - (midX - current.x) * scale + (mid.x - pinch.mid.x),
-          y: midY - (midY - current.y) * scale + (mid.y - pinch.mid.y),
-        };
+        const next = zoomOverworldView(current, ratio, midX, midY, fitZoomRef.current);
+        return { ...next, x: next.x + mid.x - pinch.mid.x, y: next.y + mid.y - pinch.mid.y };
       });
       pinchRef.current = { dist, mid };
       return;
@@ -144,15 +135,7 @@ export function useOverworldView(canvasRef: RefObject<HTMLCanvasElement | null>,
       }
       const centreX = canvas.width / 2;
       const centreY = canvas.height / 2;
-      setView((current) => {
-        const zoom = Math.min(ZOOM.max, Math.max(ZOOM.min, current.zoom * factor));
-        const scale = zoom / current.zoom;
-        return {
-          zoom,
-          x: centreX - (centreX - current.x) * scale,
-          y: centreY - (centreY - current.y) * scale,
-        };
-      });
+      setView((current) => zoomOverworldView(current, factor, centreX, centreY, fitZoomRef.current));
     },
     [canvasRef],
   );

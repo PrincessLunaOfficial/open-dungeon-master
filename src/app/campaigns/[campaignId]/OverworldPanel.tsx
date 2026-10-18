@@ -171,6 +171,8 @@ export function OverworldPanel({
     drawOverworld(context, data, {
       genre,
       pulse: pulseRef.current,
+      zoom: view.zoom,
+      viewport: { left: -view.x / view.zoom, top: -view.y / view.zoom, width: canvas.width / view.zoom, height: canvas.height / view.zoom },
       selectedLocationId: held,
       backdrop: backdropImage,
       pending: pending.length ? { kind: pathKind, points: pending } : null,
@@ -218,6 +220,7 @@ export function OverworldPanel({
       return;
     }
     const resize = () => {
+      if (!container.clientWidth) return;
       canvas.width = container.clientWidth;
       canvas.height = Math.max(320, Math.round(container.clientWidth * 0.72));
       const key = `${data.map.width}x${data.map.height}`;
@@ -268,8 +271,7 @@ export function OverworldPanel({
       data?.locations.find(
         (location) =>
           location.anchor &&
-          Math.abs(location.anchor.x - at.x) <= 1 &&
-          Math.abs(location.anchor.y - at.y) <= 1,
+          Math.hypot(location.anchor.x - at.x, location.anchor.y - at.y) <= Math.max(1, 12 / view.zoom / TILE),
       ) ?? null
     );
   }

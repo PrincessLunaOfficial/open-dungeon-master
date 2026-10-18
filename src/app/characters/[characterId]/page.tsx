@@ -412,9 +412,9 @@ export default function CharacterDetailPage({
           </div>
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-amber-500/15 pt-3">
-          <button type="button" onClick={() => setSeating(true)} className={cn(ui.btnPrimary, "min-w-0 flex-1 sm:flex-none")}>
-            <GameIcon icon={{ kind: "glyph", key: "tab-campaigns" }} size="size-6" />{" "}
-            {character.role === "companion" ? "Bring to a campaign" : "Use in a campaign"}
+          <button type="button" onClick={() => setSeating(true)} className={cn(ui.btnPrimary, "min-w-0 flex-1 gap-1 whitespace-normal px-1 text-[9px] leading-tight tracking-normal sm:flex-none sm:gap-2 sm:whitespace-nowrap sm:px-4 sm:text-[13px] sm:tracking-[0.14em]")}>
+            <GameIcon icon={{ kind: "glyph", key: "tab-campaigns" }} size="size-3 sm:size-6" />
+            <span className="min-w-0 break-words">{character.role === "companion" ? "Bring to a campaign" : "Use in a campaign"}</span>
           </button>
           {/* Levelling is the change made most often; it opens the build one
               level up instead of making the player find the level field.
@@ -423,13 +423,15 @@ export default function CharacterDetailPage({
           {character.level < 20 && (character.sheet?.classes ?? []).length <= 1 ? (
             <Link
               href={`/characters/${characterId}/edit?levelUp=1`}
-              className={cn(ui.btnSecondary, "min-w-0 flex-1 sm:flex-none")}
+              className={cn(ui.btnSecondary, "min-w-0 flex-1 gap-1 whitespace-normal px-1 text-[9px] leading-tight tracking-normal sm:flex-none sm:gap-2 sm:whitespace-nowrap sm:px-3 sm:text-[13px] sm:tracking-[0.12em]")}
             >
-              <GameIcon icon={{ kind: "glyph", key: "rest-level-up" }} size="size-6" /> Level up to {character.level + 1}
+              <GameIcon icon={{ kind: "glyph", key: "rest-level-up" }} size="size-3 sm:size-6" />
+              <span className="min-w-0 break-words">Level up to {character.level + 1}</span>
             </Link>
           ) : null}
-          <Link href={`/characters/${characterId}/edit`} className={cn(ui.btnSecondary, "min-w-0 flex-1 sm:flex-none")}>
-            <GameIcon icon={{ kind: "glyph", key: "ui-edit" }} size="size-6" /> Edit build
+          <Link href={`/characters/${characterId}/edit`} className={cn(ui.btnSecondary, "min-w-0 flex-1 gap-1 whitespace-normal px-1 text-[9px] leading-tight tracking-normal sm:flex-none sm:gap-2 sm:whitespace-nowrap sm:px-3 sm:text-[13px] sm:tracking-[0.12em]")}>
+            <GameIcon icon={{ kind: "glyph", key: "ui-edit" }} size="size-3 sm:size-6" />
+            <span className="min-w-0 break-words">Edit build</span>
           </Link>
           <KebabMenu
             items={actions}

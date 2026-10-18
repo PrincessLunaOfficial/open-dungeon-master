@@ -1,5 +1,6 @@
 "use client";
 
+import { useLayoutEffect, useRef, useState } from "react";
 import {
   ArrowRightLeft,
   Crosshair,
@@ -18,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import type { Camera } from "@/app/campaigns/[campaignId]/useBoardCamera";
 import type { StageToken } from "@/app/campaigns/[campaignId]/BoardStage";
 import type { HudGateId } from "@/lib/battlemap/hand-hud";
 
@@ -27,7 +29,8 @@ import type { HudGateId } from "@/lib/battlemap/hand-hud";
 // or an existing adjudication, with the target already known.
 //
 // Positioned in the board's own coordinate space as percentages, so it
-// rides with the camera and never needs measuring.
+// rides with the camera. Counter-scale the controls so their touch targets
+// and labels keep the same screen size when the map is magnified.
 
 export type HudAction = {
   id: string;
@@ -113,8 +116,10 @@ export function TokenHud({
   hint,
   onClose,
   anchor,
+  camera,
 }: {
   token: StageToken;
+  camera: Camera;
   boardWidth: number;
   boardHeight: number;
   footprint: number;
@@ -126,22 +131,49 @@ export function TokenHud({
   // (centre across, top, bottom), when it is not on the grid's square.
   anchor?: [number, number, number];
 }) {
+  const { zoom } = camera;
   const cx = anchor ? anchor[0] * 100 : ((token.x + footprint / 2) / boardWidth) * 100;
   const cy = anchor ? ((anchor[1] + anchor[2]) / 2) * 100 : ((token.y + footprint / 2) / boardHeight) * 100;
   // The arc opens upward, or downward near the top edge so it stays on the board.
-  const flip = anchor ? cy < 100 / 3 : token.y < boardHeight / 3;
-  const radius = 56;
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [placement, setPlacement] = useState({ x: 0, y: 0, flip: cy < 100 / 3 });
+  const flip = placement.flip;
   const spread = Math.min(Math.PI, actions.length * 0.52);
+  const radius = actions.length > 1 ? Math.max(56, 44 / (2 * Math.sin(spread / (2 * (actions.length - 1))))) : 56;
+  // The camera may put the token beside a viewport edge. Keep the menu in
+  // that viewport too, with enough room for its touch targets and captions.
+  useLayoutEffect(() => {
+    const root = rootRef.current, frame = root?.closest(".board-view");
+    if (!root || !frame) return;
+    const place = () => {
+      const board = root.getBoundingClientRect(), visible = frame.getBoundingClientRect();
+      const x = board.left + board.width * cx / 100, y = board.top + board.height * cy / 100;
+      const down = y < visible.top + visible.height / 2;
+      const clamp = (value: number, low: number, high: number) => low > high ? (low + high) / 2 : Math.min(high, Math.max(low, value));
+      const centerX = clamp(x, visible.left + radius + 46, visible.right - radius - 46);
+      const centerY = down
+        ? clamp(y, visible.top + 42, visible.bottom - radius - 45)
+        : clamp(y, visible.top + radius + 45, visible.bottom - 42);
+      const next = { x: (centerX - x) / zoom, y: (centerY - y) / zoom, flip: down };
+      setPlacement((old) => Math.abs(old.x - next.x) < .01 && Math.abs(old.y - next.y) < .01 && old.flip === next.flip ? old : next);
+    };
+    place();
+    const observer = new ResizeObserver(place);
+    observer.observe(frame);
+    observer.observe(root);
+    return () => observer.disconnect();
+  }, [cx, cy, radius, zoom, camera]);
   const start = (flip ? Math.PI / 2 : -Math.PI / 2) - spread / 2;
   return (
     <div
+      ref={rootRef}
       className="pointer-events-none absolute inset-0 z-20"
       role="menu"
       aria-label={`Actions for ${token.name}`}
     >
       <div
         className="absolute"
-        style={{ left: `${cx}%`, top: `${cy}%`, width: 0, height: 0 }}
+        style={{ left: `${cx}%`, top: `${cy}%`, width: 0, height: 0, transform: `translate(${placement.x}px, ${placement.y}px) scale(${1 / zoom})`, transformOrigin: "0 0" }}
       >
         {actions.map((action, index) => {
           const angle = start + (actions.length === 1 ? spread / 2 : (index / (actions.length - 1)) * spread);
@@ -194,7 +226,7 @@ export function TokenHud({
           }}
           aria-label="Close"
           className="token-sigil pointer-events-auto fx-pop absolute flex size-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-[rgba(107,99,148,0.6)] text-[#aeaac6] hover:text-white"
-          style={{ left: 0, top: flip ? -radius - 16 : radius + 16 }}
+          style={{ left: 0, top: flip ? -24 : 24 }}
         >
           <X className="size-3.5" />
         </button>

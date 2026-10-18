@@ -1,7 +1,8 @@
 "use client";
 
 import { EyeOff } from "lucide-react";
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
+import type { Camera } from "@/app/campaigns/[campaignId]/useBoardCamera";
 import { cn } from "@/lib/cn";
 import { GameIcon } from "@/components/ui/GameIcon";
 import { conditionIconKey } from "@/lib/battlemap/condition-glyphs";
@@ -320,8 +321,10 @@ export function TokenPlate({
   conditions,
   edge,
   anchor,
+  camera,
 }: {
   token: StageToken;
+  camera: Camera;
   boardWidth: number;
   boardHeight: number;
   footprint: number;
@@ -332,44 +335,68 @@ export function TokenPlate({
   // Where an addon's board view drew the figure (TokenHud.tsx says how).
   anchor?: [number, number, number];
 }) {
-  const cx = anchor ? anchor[0] * 100 : ((token.x + footprint / 2) / boardWidth) * 100;
-  // Below the figure in the top half, above it in the bottom half: the plate
-  // is tall now, and either way it clears the figure rather than covering it.
-  const below = anchor ? (anchor[1] + anchor[2]) / 2 < 0.5 : token.y + footprint / 2 < boardHeight / 2;
-  const cy = anchor ? (below ? anchor[2] : anchor[1]) * 100 : ((below ? token.y + footprint : token.y) / boardHeight) * 100;
+  const rootRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [placement, setPlacement] = useState({ x: 0, y: 0, scale: 1 });
+  const cx = anchor ? anchor[0] : (token.x + footprint / 2) / boardWidth;
+  const top = anchor ? anchor[1] : token.y / boardHeight;
+  const bottom = anchor ? anchor[2] : (token.y + footprint) / boardHeight;
+
+  // Keep the portrait and type at screen size, independently of the map.
+  // Measure the real card (including conditions), then fit it beside the
+  // figure inside the visible viewport, even after a pan or a resize.
+  useLayoutEffect(() => {
+    const root = rootRef.current, card = cardRef.current;
+    const frame = root?.closest(".board-view");
+    if (!root || !card || !frame) return;
+    const place = () => {
+      const board = root.getBoundingClientRect(), visible = frame.getBoundingClientRect();
+      const scale = Math.min(1, Math.max(1, visible.width - 12) / card.offsetWidth, Math.max(1, visible.height - 12) / card.offsetHeight);
+      const width = card.offsetWidth * scale, height = card.offsetHeight * scale;
+      const tokenTop = board.top + board.height * top, tokenBottom = board.top + board.height * bottom;
+      const below = visible.bottom - tokenBottom > tokenTop - visible.top;
+      const left = Math.max(visible.left + 6, Math.min(visible.right - width - 6, board.left + board.width * cx - width / 2));
+      const y = Math.max(visible.top + 6, Math.min(visible.bottom - height - 6, below ? tokenBottom + 6 : tokenTop - height - 6));
+      const next = { x: (left - board.left) / camera.zoom, y: (y - board.top) / camera.zoom, scale };
+      setPlacement((old) => Math.abs(old.x - next.x) < 0.01 && Math.abs(old.y - next.y) < 0.01 && old.scale === next.scale ? old : next);
+    };
+    place();
+    const observer = new ResizeObserver(place);
+    observer.observe(root);
+    observer.observe(frame);
+    observer.observe(card);
+    return () => observer.disconnect();
+  }, [cx, top, bottom, camera]);
+
   return (
-    <div
-      role="tooltip"
-      className="pointer-events-none absolute z-20 flex w-[136px] animate-fade-up flex-col items-center rounded-lg border border-[rgba(107,99,148,0.4)] bg-[rgba(8,6,18,0.94)] p-1.5 text-[#e9e6f4] shadow-elev-2 sm:w-[172px]"
-      style={{
-        // Half the plate's width in from either edge, so it never runs off
-        // the board; a plate near a corner slides along rather than hanging.
-        left: `clamp(88px, ${cx}%, calc(100% - 88px))`,
-        top: `${cy}%`,
-        // `translate`, not `transform`: the fade-up animates transform and
-        // holds its last frame, which would drop the plate's own offset.
-        translate: below ? "-50% 6px" : "-50% calc(-100% - 6px)",
-      }}
-    >
-      {/* The plates are square paintings; a square frame shows all of one. */}
-      <TokenFace
-        candidates={face}
-        name={token.name}
-        enemy={token.kind === "enemy"}
-        className="size-[124px] rounded-md border border-[rgba(227,193,92,0.35)] text-3xl sm:size-[160px]"
-      />
-      <span className="mt-1 flex w-full min-w-0 flex-col items-center text-center">
-        <span className="block max-w-full truncate font-display text-xs font-semibold">{token.name}</span>
-        {health ? <HealthWordChip word={health} /> : null}
-      </span>
-      {conditions?.length ? (
-        <div className="mt-1 flex flex-wrap gap-1">
-          {conditions.map((condition, index) => (
-            <ConditionChip key={`${condition.id}-${index}`} label={condition.label} rounds={condition.rounds} note={condition.note} />
-          ))}
+    <div ref={rootRef} className="pointer-events-none absolute inset-0 z-20">
+      <div className="absolute" style={{ left: placement.x, top: placement.y, transform: `scale(${placement.scale / camera.zoom})`, transformOrigin: "0 0" }}>
+        <div
+          ref={cardRef}
+          role="tooltip"
+          className="flex w-[136px] animate-fade-up flex-col items-center rounded-lg border border-[rgba(107,99,148,0.4)] bg-[rgba(8,6,18,0.94)] p-1.5 text-[#e9e6f4] shadow-elev-2 sm:w-[172px]"
+        >
+          {/* The plates are square paintings; a square frame shows all of one. */}
+          <TokenFace
+            candidates={face}
+            name={token.name}
+            enemy={token.kind === "enemy"}
+            className="size-[124px] rounded-md border border-[rgba(227,193,92,0.35)] text-3xl sm:size-[160px]"
+          />
+          <span className="mt-1 flex w-full min-w-0 flex-col items-center text-center">
+            <span className="block max-w-full truncate font-display text-xs font-semibold">{token.name}</span>
+            {health ? <HealthWordChip word={health} /> : null}
+          </span>
+          {conditions?.length ? (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {conditions.map((condition, index) => (
+                <ConditionChip key={`${condition.id}-${index}`} label={condition.label} rounds={condition.rounds} note={condition.note} />
+              ))}
+            </div>
+          ) : null}
+          {edge ? <EdgeChips edge={edge} /> : null}
         </div>
-      ) : null}
-      {edge ? <EdgeChips edge={edge} /> : null}
+      </div>
     </div>
   );
 }

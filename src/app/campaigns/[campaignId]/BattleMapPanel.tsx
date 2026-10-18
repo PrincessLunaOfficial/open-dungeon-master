@@ -1056,6 +1056,7 @@ export function BattleMapPanel({
         ) : null}
         {hudToken ? (
           <TokenHud
+            camera={cam.camera}
             token={hudToken}
             boardWidth={view.width}
             boardHeight={view.height}
@@ -1094,6 +1095,7 @@ export function BattleMapPanel({
         ) : null}
         {plateToken && !hudToken && !tokenGhost && !drawActive ? (
           <TokenPlate
+            camera={cam.camera}
             token={plateToken}
             boardWidth={view.width}
             boardHeight={view.height}

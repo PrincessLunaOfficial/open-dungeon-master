@@ -42,6 +42,15 @@ export function clampView(view: View, widthPx: number, heightPx: number): View {
   };
 }
 
+// Separate CSS layout from raster resolution: camera zoom and a phone's
+// pixel density both need real image samples. Bound allocations for large
+// maps at maximum zoom, rather than letting a canvas exhaust mobile memory.
+export function terrainRasterSize(width: number, height: number, zoom: number, dpr: number) {
+  const density = Math.min(Math.max(1, dpr) * Math.max(1, zoom),
+    8192 / width, 8192 / height, Math.sqrt(8_388_608 / (width * height)));
+  return { width: Math.max(1, Math.floor(width * density)), height: Math.max(1, Math.floor(height * density)) };
+}
+
 // A picture decoded from a path, kept with the path it came from so a
 // swapped or removed picture is simply not the current one.
 export function useImage(path: string) {

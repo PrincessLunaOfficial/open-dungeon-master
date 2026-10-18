@@ -310,7 +310,9 @@ export function BackdropControls({
               label="Across"
               min={-BACKDROP_LIMITS.maxOffset}
               max={BACKDROP_LIMITS.maxOffset}
-              step={0.25}
+              step={0.1}
+              nudge={0.1}
+              disabled={busy}
               value={transform.offsetX}
               readout={String(transform.offsetX)}
               onChange={(offsetX) => set({ offsetX })}
@@ -319,7 +321,9 @@ export function BackdropControls({
               label="Down"
               min={-BACKDROP_LIMITS.maxOffset}
               max={BACKDROP_LIMITS.maxOffset}
-              step={0.25}
+              step={0.1}
+              nudge={0.1}
+              disabled={busy}
               value={transform.offsetY}
               readout={String(transform.offsetY)}
               onChange={(offsetY) => set({ offsetY })}

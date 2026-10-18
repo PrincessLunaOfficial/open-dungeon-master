@@ -31,6 +31,7 @@ import {
   clampView,
   flashTiles,
   useImage,
+  terrainRasterSize,
   type View,
 } from "@/app/campaigns/[campaignId]/terrainCanvasParts";
 
@@ -169,6 +170,7 @@ export function TerrainCanvas({
   const outerRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const stageWidthRef = useRef(0);
   const [view, setView] = useState<View>(FIT);
   const [hover, setHover] = useState<XY | null>(null);
   const [drag, setDrag] = useState<{ from: XY; to: XY } | null>(null);
@@ -198,9 +200,20 @@ export function TerrainCanvas({
     if (!canvas || !context) {
       return;
     }
-    const tile = Math.max(4, Math.floor(canvas.width / width));
-    canvas.height = tile * height;
+    const cssWidth = stageWidthRef.current;
+    if (!cssWidth) return;
+    const tile = cssWidth / width;
+    const cssHeight = tile * height;
+    const raster = terrainRasterSize(cssWidth, cssHeight, view.zoom, window.devicePixelRatio || 1);
+    if (canvas.width !== raster.width) canvas.width = raster.width;
+    if (canvas.height !== raster.height) canvas.height = raster.height;
+    canvas.style.width = `${cssWidth}px`;
+    canvas.style.height = `${cssHeight}px`;
+    context.setTransform(1, 0, 0, 1, 0, 0);
     context.clearRect(0, 0, canvas.width, canvas.height);
+    context.setTransform(raster.width / cssWidth, 0, 0, raster.height / cssHeight, 0, 0);
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
     const shows = (layer: keyof HiddenLayers) => !hidden?.[layer];
     const art = shows("backdrop") ? backdrop : null;
     const picture = art ? (image?.element ?? null) : null;
@@ -246,7 +259,7 @@ export function TerrainCanvas({
       drawBorderGuard(context, width, height, tile);
     }
     drawToolPreview(context, { tool, hover, drag, painting, terrain, width, height, tile });
-  }, [terrain, width, height, backdrop, image, lights, labels, props, doors, zones, overlay, tool, hover, drag, painting, selected, ground, hidden, showGrid, dmView, guard]);
+  }, [terrain, width, height, backdrop, image, lights, labels, props, doors, zones, overlay, tool, hover, drag, painting, selected, ground, hidden, showGrid, dmView, guard, view.zoom]);
 
   // The observer subscribes once; the draw it calls is whichever is current.
   // Keeping the two apart means a hover does not re-subscribe to resizes.
@@ -288,13 +301,14 @@ export function TerrainCanvas({
       const down = outer.clientHeight;
       const stage = contain && down > 0 ? Math.min(across, Math.floor((down * width) / height)) : across;
       wrapper.style.width = contain ? `${Math.max(1, stage)}px` : "";
-      canvas.width = Math.max(1, stage);
+      stageWidthRef.current = Math.max(1, stage);
       drawRef.current();
     };
     resize();
     const observer = new ResizeObserver(resize);
     observer.observe(outer);
-    return () => observer.disconnect();
+    window.addEventListener("resize", resize);
+    return () => { observer.disconnect(); window.removeEventListener("resize", resize); };
   }, [contain, width, height]);
 
   // A new map starts at fit-to-width; a map that changed size under the

@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { Minus, Plus } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Slider } from "@/components/ui/Slider";
 import { TERRAIN } from "@/lib/battlemap/types";
@@ -84,6 +85,8 @@ export function RangeRow({
   max,
   step = 1,
   readout,
+  nudge,
+  disabled = false,
   onChange,
 }: {
   label: string;
@@ -92,14 +95,19 @@ export function RangeRow({
   max: number;
   step?: number;
   readout?: string;
+  nudge?: number;
+  disabled?: boolean;
   onChange: (value: number) => void;
 }) {
+  const bump = (direction: number) => onChange(Math.min(max, Math.max(min, Number((value + direction * (nudge ?? step)).toFixed(10)))));
   return (
-    <label className="flex items-center gap-2 text-[11px] text-stone-400">
+    <div className="flex items-center gap-2 text-[11px] text-stone-400">
       <span className="w-12 shrink-0">{label}</span>
-      <Slider min={min} max={max} step={step} value={value} onChange={onChange} label={label} className="map-range min-w-0 flex-1" />
+      {nudge ? <button type="button" aria-label={`Decrease ${label}`} disabled={disabled || value <= min} onClick={() => bump(-1)} className="flex size-8 shrink-0 items-center justify-center rounded-md border border-stone-700 text-stone-300 disabled:opacity-35"><Minus className="size-3.5" /></button> : null}
+      <Slider disabled={disabled} min={min} max={max} step={step} value={value} onChange={onChange} label={label} className="map-range min-w-0 flex-1" />
+      {nudge ? <button type="button" aria-label={`Increase ${label}`} disabled={disabled || value >= max} onClick={() => bump(1)} className="flex size-8 shrink-0 items-center justify-center rounded-md border border-stone-700 text-stone-300 disabled:opacity-35"><Plus className="size-3.5" /></button> : null}
       {readout !== undefined ? <span className="w-10 shrink-0 text-right font-mono text-[10px] tabular-nums text-stone-300">{readout}</span> : null}
-    </label>
+    </div>
   );
 }
 
